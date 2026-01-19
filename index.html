@@ -23,10 +23,20 @@
             border: 1px solid rgba(139, 92, 246, 0.1);
         }
 
+        /* FIXED: Habit Matrix Layout */
+        .habit-grid-container {
+            overflow-x: auto;
+        }
         .habit-grid {
             display: grid;
-            grid-template-columns: 150px repeat(31, minmax(30px, 1fr));
-            overflow-x: auto;
+            grid-template-columns: 150px repeat(31, minmax(30px, 1fr)); /* Fixed width for habit names */
+            min-width: max-content; /* Ensure it doesn't shrink too much */
+        }
+        .habit-name-cell {
+            position: sticky;
+            left: 0;
+            background-color: #131318; /* Match grid background */
+            z-index: 10; /* Ensure it stays on top */
         }
 
         .custom-scrollbar::-webkit-scrollbar {
@@ -43,7 +53,7 @@
             border-bottom: 2px solid #8b5cf6;
         }
 
-        .pomo-timer {
+        .pomo-timer, .stopwatch-timer {
             font-variant-numeric: tabular-nums;
         }
 
@@ -56,14 +66,21 @@
 <body class="min-h-screen">
 
     <nav class="sticky top-0 z-50 glass-card border-b border-white/10 px-6 py-4 flex justify-between items-center">
-        <div class="flex items-center gap-2">
-            <i data-lucide="target" class="text-violet-500"></i>
-            <span class="text-xl font-bold tracking-tighter">TIMETABLE TRACKER</span>
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2">
+                <i data-lucide="target" class="text-violet-500"></i>
+                <span class="text-xl font-bold tracking-tighter hidden md:inline">TIMETABLE TRACKER</span>
+            </div>
+            <div class="bg-white/10 px-3 py-1 rounded-lg flex items-center gap-2">
+                <i data-lucide="clock" class="w-4 h-4 text-violet-400"></i>
+                <span id="ist-clock" class="font-mono font-bold text-sm">Loading...</span>
+            </div>
         </div>
         <div class="flex gap-8 text-sm font-medium text-gray-400">
             <button onclick="switchTab('tracker')" id="nav-tracker" class="hover:text-white transition active-tab">TRACKER</button>
             <button onclick="switchTab('calendar')" id="nav-calendar" class="hover:text-white transition">CALENDAR</button>
             <button onclick="switchTab('tasks')" id="nav-tasks" class="hover:text-white transition">TASKS</button>
+            <button onclick="switchTab('timer')" id="nav-timer" class="hover:text-white transition">TIMER</button>
         </div>
         <div class="flex gap-4">
             <button onclick="exportData()" class="p-2 hover:bg-white/5 rounded-lg"><i data-lucide="download" class="w-5 h-5"></i></button>
@@ -91,13 +108,15 @@
 
             <div class="glass-card rounded-2xl overflow-hidden">
                 <div class="p-6 border-b border-white/5 flex justify-between items-center">
-                    <h3 class="font-bold">Habit Matrix - <span id="current-month-name">October</span></h3>
+                    <h3 class="font-bold">Habit Matrix - <span id="current-month-name">Month</span></h3>
                     <button onclick="addNewHabit()" class="bg-violet-600 hover:bg-violet-700 px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition">
                         <i data-lucide="plus" class="w-4 h-4"></i> Add Habit
                     </button>
                 </div>
-                <div id="habit-grid-root" class="habit-grid custom-scrollbar p-6 bg-[#131318]">
-                    </div>
+                <div class="habit-grid-container custom-scrollbar bg-[#131318]">
+                    <div id="habit-grid-root" class="habit-grid p-6">
+                        </div>
+                </div>
             </div>
         </section>
 
@@ -169,9 +188,40 @@
             </div>
         </section>
 
+        <section id="page-timer" class="hidden space-y-8">
+            <div class="glass-card p-8 rounded-3xl max-w-xl mx-auto text-center">
+                <h2 class="text-2xl font-bold mb-6 flex items-center justify-center gap-2">
+                    <i data-lucide="stop-circle" class="text-green-500"></i> Study Stopwatch
+                </h2>
+                <div id="stopwatch-display" class="stopwatch-timer text-7xl font-black text-center mb-8">00:00:00</div>
+                <div class="flex gap-4 justify-center">
+                    <button onclick="startStopwatch()" id="btn-start-stop" class="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-xl transition font-bold uppercase tracking-widest text-sm flex items-center gap-2">
+                        <i data-lucide="play"></i> Start
+                    </button>
+                    <button onclick="resetStopwatch()" class="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl transition font-bold uppercase tracking-widest text-sm flex items-center gap-2">
+                        <i data-lucide="rotate-ccw"></i> Reset
+                    </button>
+                </div>
+            </div>
+        </section>
+
     </main>
 
     <script>
+        // --- IST CLOCK LOGIC ---
+        function updateISTClock() {
+            const now = new Date();
+            // IST is UTC+5:30
+            const istOffset = 5.5 * 60 * 60 * 1000;
+            const istTime = new Date(now.getTime() + istOffset);
+            const hours = istTime.getUTCHours().toString().padStart(2, '0');
+            const minutes = istTime.getUTCMinutes().toString().padStart(2, '0');
+            const seconds = istTime.getUTCSeconds().toString().padStart(2, '0');
+            document.getElementById('ist-clock').innerText = `${hours}:${minutes}:${seconds} IST`;
+        }
+        setInterval(updateISTClock, 1000);
+        updateISTClock(); // Initial call
+
         // --- DATA STATE ---
         let state = JSON.parse(localStorage.getItem('timetable_data')) || {
             habits: ["Wake up (2-4 AM)", "Workout", "Study 18 Hours", "No Porn", "No Games"],
@@ -200,19 +250,21 @@
             if(tabId === 'tasks') renderTasks();
         }
 
-        // --- TRACKER LOGIC ---
+        // --- TRACKER LOGIC (FIXED GRID) ---
         function renderTracker() {
             const root = document.getElementById('habit-grid-root');
             const daysInMonth = new Date(state.currentYear, state.currentMonth + 1, 0).getDate();
             document.getElementById('current-month-name').innerText = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(state.currentYear, state.currentMonth));
 
-            let html = `<div class="font-bold text-gray-500 text-xs">HABIT</div>`;
+            // Header Row
+            let html = `<div class="font-bold text-gray-500 text-xs habit-name-cell py-2">HABIT</div>`;
             for (let i = 1; i <= daysInMonth; i++) {
-                html += `<div class="text-center text-xs font-bold text-gray-600">${i}</div>`;
+                html += `<div class="text-center text-xs font-bold text-gray-600 py-2">${i}</div>`;
             }
 
+            // Habit Rows
             state.habits.forEach(habit => {
-                html += `<div class="py-2 text-sm font-medium border-b border-white/5 truncate pr-4">${habit}</div>`;
+                html += `<div class="py-2 text-sm font-medium border-b border-white/5 truncate pr-4 habit-name-cell">${habit}</div>`;
                 for (let i = 1; i <= daysInMonth; i++) {
                     const dateKey = `${state.currentYear}-${state.currentMonth}-${i}`;
                     const isDone = state.completions[dateKey]?.includes(habit);
@@ -357,6 +409,51 @@
             const m = Math.floor(times[type] / 60);
             const s = times[type] % 60;
             document.getElementById(`timer-${type}`).innerText = `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        // --- STOPWATCH LOGIC ---
+        let stopwatchInterval = null;
+        let stopwatchSeconds = 0;
+        let isStopwatchRunning = false;
+
+        function startStopwatch() {
+            const btn = document.getElementById('btn-start-stop');
+            if (isStopwatchRunning) {
+                clearInterval(stopwatchInterval);
+                isStopwatchRunning = false;
+                btn.innerHTML = '<i data-lucide="play"></i> Start';
+                btn.classList.replace('bg-red-600', 'bg-green-600');
+                btn.classList.replace('hover:bg-red-700', 'hover:bg-green-700');
+            } else {
+                stopwatchInterval = setInterval(() => {
+                    stopwatchSeconds++;
+                    updateStopwatchUI();
+                }, 1000);
+                isStopwatchRunning = true;
+                btn.innerHTML = '<i data-lucide="pause"></i> Stop';
+                btn.classList.replace('bg-green-600', 'bg-red-600');
+                btn.classList.replace('hover:bg-green-700', 'hover:bg-red-700');
+            }
+            lucide.createIcons();
+        }
+
+        function resetStopwatch() {
+            clearInterval(stopwatchInterval);
+            isStopwatchRunning = false;
+            stopwatchSeconds = 0;
+            updateStopwatchUI();
+            const btn = document.getElementById('btn-start-stop');
+            btn.innerHTML = '<i data-lucide="play"></i> Start';
+            btn.classList.replace('bg-red-600', 'bg-green-600');
+            btn.classList.replace('hover:bg-red-700', 'hover:bg-green-700');
+            lucide.createIcons();
+        }
+
+        function updateStopwatchUI() {
+            const h = Math.floor(stopwatchSeconds / 3600).toString().padStart(2, '0');
+            const m = Math.floor((stopwatchSeconds % 3600) / 60).toString().padStart(2, '0');
+            const s = (stopwatchSeconds % 60).toString().padStart(2, '0');
+            document.getElementById('stopwatch-display').innerText = `${h}:${m}:${s}`;
         }
 
         // --- CHARTS ---
