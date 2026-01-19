@@ -1,965 +1,431 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, CheckSquare, Clock, TrendingUp, Plus, X, Moon, Sun, Download, Upload, Bell, BellOff, Target, BarChart3, ChevronLeft, ChevronRight, Play, Pause, RotateCcw } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-
-const TimetableTracker = () => {
-  // Theme and navigation
-  const [darkMode, setDarkMode] = useState(true);
-  const [currentPage, setCurrentPage] = useState('tracker');
-  const [notifications, setNotifications] = useState(false);
-  
-  // Tracker state
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [viewMode, setViewMode] = useState('monthly'); // weekly, monthly, yearly
-  const [habits, setHabits] = useState([
-    { id: 1, name: 'Wake up at 2/4 AM', color: '#3b82f6' },
-    { id: 2, name: 'Workout', color: '#10b981' },
-    { id: 3, name: 'Study 18 hours', color: '#8b5cf6' },
-    { id: 4, name: 'No porn', color: '#ef4444' },
-    { id: 5, name: 'No games', color: '#f59e0b' }
-  ]);
-  const [habitData, setHabitData] = useState({});
-  const [showAddHabit, setShowAddHabit] = useState(false);
-  const [newHabitName, setNewHabitName] = useState('');
-  
-  // Calendar state
-  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
-  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [journalEntries, setJournalEntries] = useState({});
-  const [currentJournal, setCurrentJournal] = useState('');
-  const [calendarTasks, setCalendarTasks] = useState({});
-  const [currentDateTasks, setCurrentDateTasks] = useState([]);
-  const [newCalendarTask, setNewCalendarTask] = useState('');
-  
-  // Tasks state
-  const [dailyTasks, setDailyTasks] = useState([]);
-  const [newTask, setNewTask] = useState('');
-  const [pomodoro120, setPomodoro120] = useState({ time: 120 * 60, running: false });
-  const [pomodoro15, setPomodoro15] = useState({ time: 15 * 60, running: false });
-  const [taskStreak, setTaskStreak] = useState(0);
-  
-  const timer120Ref = useRef(null);
-  const timer15Ref = useRef(null);
-
-  // Load data from storage
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const settingsData = await window.storage.get('settings');
-        const habitsData = await window.storage.get('habits');
-        const habitDataStore = await window.storage.get('habitData');
-        const journalData = await window.storage.get('journalEntries');
-        const calendarTasksData = await window.storage.get('calendarTasks');
-        const dailyTasksData = await window.storage.get('dailyTasks');
-        const streakData = await window.storage.get('taskStreak');
-        const pomodoroData = await window.storage.get('pomodoroState');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timetable Tracker | Deep Work Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         
-        if (settingsData) {
-          const settings = JSON.parse(settingsData.value);
-          setDarkMode(settings.darkMode ?? true);
-          setNotifications(settings.notifications ?? false);
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f0f12;
+            color: #ffffff;
+            overflow-x: hidden;
         }
-        if (habitsData) setHabits(JSON.parse(habitsData.value));
-        if (habitDataStore) setHabitData(JSON.parse(habitDataStore.value));
-        if (journalData) setJournalEntries(JSON.parse(journalData.value));
-        if (calendarTasksData) setCalendarTasks(JSON.parse(calendarTasksData.value));
-        if (dailyTasksData) setDailyTasks(JSON.parse(dailyTasksData.value));
-        if (streakData) setTaskStreak(parseInt(streakData.value));
-        if (pomodoroData) {
-          const pomo = JSON.parse(pomodoroData.value);
-          if (pomo.p120) setPomodoro120(pomo.p120);
-          if (pomo.p15) setPomodoro15(pomo.p15);
+
+        .glass-card {
+            background: rgba(26, 26, 31, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(139, 92, 246, 0.1);
         }
-      } catch (e) {
-        console.log('Loading initial state');
-      }
-    };
-    loadData();
-  }, []);
 
-  // Save data to storage
-  useEffect(() => {
-    const saveData = async () => {
-      try {
-        await window.storage.set('settings', JSON.stringify({ darkMode, notifications }));
-        await window.storage.set('habits', JSON.stringify(habits));
-        await window.storage.set('habitData', JSON.stringify(habitData));
-        await window.storage.set('journalEntries', JSON.stringify(journalEntries));
-        await window.storage.set('calendarTasks', JSON.stringify(calendarTasks));
-        await window.storage.set('dailyTasks', JSON.stringify(dailyTasks));
-        await window.storage.set('taskStreak', taskStreak.toString());
-        await window.storage.set('pomodoroState', JSON.stringify({ p120: pomodoro120, p15: pomodoro15 }));
-      } catch (e) {
-        console.error('Error saving:', e);
-      }
-    };
-    saveData();
-  }, [darkMode, notifications, habits, habitData, journalEntries, calendarTasks, dailyTasks, taskStreak, pomodoro120, pomodoro15]);
-
-  // Pomodoro timers
-  useEffect(() => {
-    if (pomodoro120.running && pomodoro120.time > 0) {
-      timer120Ref.current = setInterval(() => {
-        setPomodoro120(prev => {
-          if (prev.time <= 1) {
-            if (notifications) {
-              new Notification('Pomodoro Complete!', { body: '120-minute session finished!' });
-            }
-            return { time: 0, running: false };
-          }
-          return { ...prev, time: prev.time - 1 };
-        });
-      }, 1000);
-    } else {
-      if (timer120Ref.current) clearInterval(timer120Ref.current);
-    }
-    return () => { if (timer120Ref.current) clearInterval(timer120Ref.current); };
-  }, [pomodoro120.running, notifications]);
-
-  useEffect(() => {
-    if (pomodoro15.running && pomodoro15.time > 0) {
-      timer15Ref.current = setInterval(() => {
-        setPomodoro15(prev => {
-          if (prev.time <= 1) {
-            if (notifications) {
-              new Notification('Break Complete!', { body: '15-minute break finished!' });
-            }
-            return { time: 0, running: false };
-          }
-          return { ...prev, time: prev.time - 1 };
-        });
-      }, 1000);
-    } else {
-      if (timer15Ref.current) clearInterval(timer15Ref.current);
-    }
-    return () => { if (timer15Ref.current) clearInterval(timer15Ref.current); };
-  }, [pomodoro15.running, notifications]);
-
-  // Request notification permission
-  useEffect(() => {
-    if (notifications && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, [notifications]);
-
-  // Helper functions
-  const formatDate = (year, month, day) => `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-
-  const toggleHabit = (habitId, year, month, day) => {
-    const dateKey = formatDate(year, month, day);
-    setHabitData(prev => ({
-      ...prev,
-      [dateKey]: {
-        ...prev[dateKey],
-        [habitId]: !prev[dateKey]?.[habitId]
-      }
-    }));
-  };
-
-  const addHabit = () => {
-    if (newHabitName.trim()) {
-      const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#f59e0b', '#06b6d4', '#ec4899'];
-      setHabits([...habits, {
-        id: Date.now(),
-        name: newHabitName,
-        color: colors[habits.length % colors.length]
-      }]);
-      setNewHabitName('');
-      setShowAddHabit(false);
-    }
-  };
-
-  const deleteHabit = (habitId) => {
-    setHabits(habits.filter(h => h.id !== habitId));
-  };
-
-  const getMonthlyCompletion = (year, month) => {
-    const days = getDaysInMonth(year, month);
-    const data = [];
-    
-    for (let day = 1; day <= days; day++) {
-      const dateKey = formatDate(year, month, day);
-      const dayData = habitData[dateKey] || {};
-      const completed = Object.values(dayData).filter(Boolean).length;
-      const percentage = habits.length > 0 ? (completed / habits.length) * 100 : 0;
-      data.push({ day, percentage: Math.round(percentage) });
-    }
-    
-    return data;
-  };
-
-  const getOverallCompletion = (year, month) => {
-    const data = getMonthlyCompletion(year, month);
-    const avg = data.reduce((sum, d) => sum + d.percentage, 0) / data.length;
-    return Math.round(avg);
-  };
-
-  const addDailyTask = () => {
-    if (newTask.trim()) {
-      setDailyTasks([...dailyTasks, { id: Date.now(), text: newTask, completed: false }]);
-      setNewTask('');
-    }
-  };
-
-  const toggleTask = (taskId) => {
-    setDailyTasks(dailyTasks.map(task => 
-      task.id === taskId ? { ...task, completed: !task.completed } : task
-    ));
-  };
-
-  const deleteTask = (taskId) => {
-    setDailyTasks(dailyTasks.filter(t => t.id !== taskId));
-  };
-
-  const saveJournal = () => {
-    if (selectedDate) {
-      const dateKey = formatDate(calendarYear, calendarMonth, selectedDate);
-      setJournalEntries({ ...journalEntries, [dateKey]: currentJournal });
-    }
-  };
-
-  const addCalendarTask = () => {
-    if (newCalendarTask.trim() && selectedDate) {
-      const dateKey = formatDate(calendarYear, calendarMonth, selectedDate);
-      const tasks = calendarTasks[dateKey] || [];
-      setCalendarTasks({
-        ...calendarTasks,
-        [dateKey]: [...tasks, { id: Date.now(), text: newCalendarTask, completed: false }]
-      });
-      setCurrentDateTasks([...currentDateTasks, { id: Date.now(), text: newCalendarTask, completed: false }]);
-      setNewCalendarTask('');
-    }
-  };
-
-  const toggleCalendarTask = (taskId) => {
-    if (selectedDate) {
-      const dateKey = formatDate(calendarYear, calendarMonth, selectedDate);
-      const updatedTasks = currentDateTasks.map(t => 
-        t.id === taskId ? { ...t, completed: !t.completed } : t
-      );
-      setCalendarTasks({ ...calendarTasks, [dateKey]: updatedTasks });
-      setCurrentDateTasks(updatedTasks);
-    }
-  };
-
-  const selectDate = (day) => {
-    setSelectedDate(day);
-    const dateKey = formatDate(calendarYear, calendarMonth, day);
-    setCurrentJournal(journalEntries[dateKey] || '');
-    setCurrentDateTasks(calendarTasks[dateKey] || []);
-  };
-
-  const exportData = () => {
-    const data = {
-      habits,
-      habitData,
-      journalEntries,
-      calendarTasks,
-      dailyTasks,
-      taskStreak,
-      settings: { darkMode, notifications }
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `timetable-tracker-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-  };
-
-  const importData = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target.result);
-          if (data.habits) setHabits(data.habits);
-          if (data.habitData) setHabitData(data.habitData);
-          if (data.journalEntries) setJournalEntries(data.journalEntries);
-          if (data.calendarTasks) setCalendarTasks(data.calendarTasks);
-          if (data.dailyTasks) setDailyTasks(data.dailyTasks);
-          if (data.taskStreak) setTaskStreak(data.taskStreak);
-          if (data.settings) {
-            setDarkMode(data.settings.darkMode ?? true);
-            setNotifications(data.settings.notifications ?? false);
-          }
-        } catch (err) {
-          alert('Invalid file format');
+        .habit-grid {
+            display: grid;
+            grid-template-columns: 150px repeat(31, minmax(30px, 1fr));
+            overflow-x: auto;
         }
-      };
-      reader.readAsText(file);
-    }
-  };
 
-  const bgClass = darkMode ? 'bg-gray-900' : 'bg-gray-100';
-  const cardClass = darkMode ? 'bg-gray-800' : 'bg-white';
-  const textClass = darkMode ? 'text-gray-100' : 'text-gray-900';
-  const textSecondary = darkMode ? 'text-gray-400' : 'text-gray-600';
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 10px;
+        }
 
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        .active-tab {
+            color: #8b5cf6;
+            border-bottom: 2px solid #8b5cf6;
+        }
 
-  return (
-    <div className={`min-h-screen ${bgClass} ${textClass} transition-colors duration-300`}>
-      {/* Header */}
-      <div className={`${cardClass} shadow-lg`}>
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center mb-4">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
-              Timetable Tracker
-            </h1>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                aria-label="Toggle theme"
-              >
-                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-              </button>
-              <button
-                onClick={() => setNotifications(!notifications)}
-                className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                aria-label="Toggle notifications"
-              >
-                {notifications ? <Bell size={20} /> : <BellOff size={20} />}
-              </button>
-              <button
-                onClick={exportData}
-                className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                aria-label="Export data"
-              >
-                <Download size={20} />
-              </button>
-              <label className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'} cursor-pointer`}>
-                <Upload size={20} />
-                <input type="file" accept=".json" onChange={importData} className="hidden" />
-              </label>
-            </div>
-          </div>
-          
-          {/* Navigation */}
-          <div className="flex gap-2 flex-wrap">
-            {[
-              { id: 'tracker', label: 'Tracker', icon: BarChart3 },
-              { id: 'calendar', label: 'Calendar', icon: Calendar },
-              { id: 'tasks', label: 'Tasks', icon: CheckSquare }
-            ].map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setCurrentPage(id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all ${
-                  currentPage === id
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
-                    : darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
-                }`}
-              >
-                <Icon size={18} />
-                {label}
-              </button>
-            ))}
-          </div>
+        .pomo-timer {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .checked-circle {
+            background: #3b82f6;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <nav class="sticky top-0 z-50 glass-card border-b border-white/10 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <i data-lucide="target" class="text-violet-500"></i>
+            <span class="text-xl font-bold tracking-tighter">TIMETABLE TRACKER</span>
         </div>
-      </div>
+        <div class="flex gap-8 text-sm font-medium text-gray-400">
+            <button onclick="switchTab('tracker')" id="nav-tracker" class="hover:text-white transition active-tab">TRACKER</button>
+            <button onclick="switchTab('calendar')" id="nav-calendar" class="hover:text-white transition">CALENDAR</button>
+            <button onclick="switchTab('tasks')" id="nav-tasks" class="hover:text-white transition">TASKS</button>
+        </div>
+        <div class="flex gap-4">
+            <button onclick="exportData()" class="p-2 hover:bg-white/5 rounded-lg"><i data-lucide="download" class="w-5 h-5"></i></button>
+        </div>
+    </nav>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* TRACKER PAGE */}
-        {currentPage === 'tracker' && (
-          <div className="space-y-6">
-            {/* View Mode Selector */}
-            <div className={`${cardClass} rounded-lg shadow-lg p-6`}>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold flex items-center gap-2">
-                  <TrendingUp size={28} />
-                  Habit Tracker
-                </h2>
-                <div className="flex gap-2">
-                  {['weekly', 'monthly', 'yearly'].map(mode => (
-                    <button
-                      key={mode}
-                      onClick={() => setViewMode(mode)}
-                      className={`px-4 py-2 rounded-lg font-semibold ${
-                        viewMode === mode
-                          ? 'bg-blue-600 text-white'
-                          : darkMode ? 'bg-gray-700' : 'bg-gray-200'
-                      }`}
-                    >
-                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Month Selector */}
-              <div className="flex justify-between items-center mb-4">
-                <button
-                  onClick={() => {
-                    if (selectedMonth === 0) {
-                      setSelectedMonth(11);
-                      setSelectedYear(selectedYear - 1);
-                    } else {
-                      setSelectedMonth(selectedMonth - 1);
-                    }
-                  }}
-                  className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <h3 className="text-xl font-bold">
-                  {monthNames[selectedMonth]} {selectedYear}
-                </h3>
-                <button
-                  onClick={() => {
-                    if (selectedMonth === 11) {
-                      setSelectedMonth(0);
-                      setSelectedYear(selectedYear + 1);
-                    } else {
-                      setSelectedMonth(selectedMonth + 1);
-                    }
-                  }}
-                  className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </div>
-
-              {/* Overall Progress Circle */}
-              <div className="flex justify-center mb-6">
-                <div className="relative w-32 h-32">
-                  <svg className="transform -rotate-90 w-32 h-32">
-                    <circle
-                      cx="64"
-                      cy="64"
-                      r="56"
-                      stroke={darkMode ? '#374151' : '#e5e7eb'}
-                      strokeWidth="12"
-                      fill="none"
-                    />
-                    <circle
-                      cx="64"
-                      cy="64"
-                      r="56"
-                      stroke="#8b5cf6"
-                      strokeWidth="12"
-                      fill="none"
-                      strokeDasharray={`${2 * Math.PI * 56}`}
-                      strokeDashoffset={`${2 * Math.PI * 56 * (1 - getOverallCompletion(selectedYear, selectedMonth) / 100)}`}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center flex-col">
-                    <span className="text-2xl font-bold">{getOverallCompletion(selectedYear, selectedMonth)}%</span>
-                    <span className={`text-xs ${textSecondary}`}>Complete</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Habit Grid */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr>
-                      <th className="text-left p-2 sticky left-0 bg-gray-800 z-10">Habit</th>
-                      {Array.from({ length: getDaysInMonth(calendarYear, calendarMonth) }, (_, i) => {
-                  const day = i + 1;
-                  const dateKey = formatDate(calendarYear, calendarMonth, day);
-                  const hasJournal = journalEntries[dateKey];
-                  const hasTasks = calendarTasks[dateKey]?.length > 0;
-                  const isSelected = selectedDate === day;
-                  const isToday = new Date().getDate() === day && 
-                                  new Date().getMonth() === calendarMonth && 
-                                  new Date().getFullYear() === calendarYear;
-                  
-                  return (
-                    <button
-                      key={day}
-                      onClick={() => selectDate(day)}
-                      className={`p-4 rounded-lg border-2 transition-all ${
-                        isSelected
-                          ? 'bg-blue-600 border-blue-500 text-white'
-                          : isToday
-                          ? 'border-purple-500 bg-purple-900'
-                          : darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-100 border-gray-300'
-                      }`}
-                    >
-                      <div className="text-lg font-bold">{day}</div>
-                      <div className="flex justify-center gap-1 mt-1">
-                        {hasJournal && <div className="w-2 h-2 rounded-full bg-green-500" />}
-                        {hasTasks && <div className="w-2 h-2 rounded-full bg-yellow-500" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Selected Date Details */}
-            {selectedDate && (
-              <div className={`${cardClass} rounded-lg shadow-lg p-6`}>
-                <h3 className="text-2xl font-bold mb-4">
-                  {monthNames[calendarMonth]} {selectedDate}, {calendarYear}
-                </h3>
-
-                {/* Journal Section */}
-                <div className="mb-6">
-                  <h4 className="text-xl font-semibold mb-3">Daily Journal</h4>
-                  <textarea
-                    value={currentJournal}
-                    onChange={(e) => setCurrentJournal(e.target.value)}
-                    onBlur={saveJournal}
-                    placeholder="Write your thoughts for today..."
-                    className={`w-full h-40 p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                  />
-                </div>
-
-                {/* Tasks Section */}
-                <div>
-                  <h4 className="text-xl font-semibold mb-3">Today's Tasks</h4>
-                  <div className="flex gap-2 mb-4">
-                    <input
-                      type="text"
-                      value={newCalendarTask}
-                      onChange={(e) => setNewCalendarTask(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && addCalendarTask()}
-                      placeholder="Add a task..."
-                      className={`flex-1 p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                    />
-                    <button
-                      onClick={addCalendarTask}
-                      className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
-                    >
-                      <Plus size={20} />
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {currentDateTasks.map(task => (
-                      <div
-                        key={task.id}
-                        className={`flex items-center gap-3 p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={task.completed}
-                          onChange={() => toggleCalendarTask(task.id)}
-                          className="w-5 h-5"
-                        />
-                        <span className={task.completed ? 'line-through opacity-50' : ''}>
-                          {task.text}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TASKS PAGE */}
-        {currentPage === 'tasks' && (
-          <div className="space-y-6">
-            {/* Daily Tasks */}
-            <div className={`${cardClass} rounded-lg shadow-lg p-6`}>
-              <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                <CheckSquare size={28} />
-                Daily Tasks
-              </h2>
-              
-              <div className="flex gap-2 mb-4">
-                <input
-                  type="text"
-                  value={newTask}
-                  onChange={(e) => setNewTask(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && addDailyTask()}
-                  placeholder="Add a new task..."
-                  className={`flex-1 p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                />
-                <button
-                  onClick={addDailyTask}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
-                >
-                  <Plus size={20} />
-                </button>
-              </div>
-
-              {/* Task Stats */}
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
-                  <div className="text-sm text-gray-400">Completed Today</div>
-                  <div className="text-3xl font-bold text-green-500">
-                    {dailyTasks.filter(t => t.completed).length}/{dailyTasks.length}
-                  </div>
-                </div>
-                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
-                  <div className="text-sm text-gray-400">Streak</div>
-                  <div className="text-3xl font-bold text-orange-500">{taskStreak} days</div>
-                </div>
-              </div>
-
-              {/* Task List */}
-              <div className="space-y-2">
-                {dailyTasks.map(task => (
-                  <div
-                    key={task.id}
-                    className={`flex items-center gap-3 p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={task.completed}
-                      onChange={() => toggleTask(task.id)}
-                      className="w-6 h-6 cursor-pointer"
-                    />
-                    <span className={`flex-1 text-lg ${task.completed ? 'line-through opacity-50' : ''}`}>
-                      {task.text}
-                    </span>
-                    <button
-                      onClick={() => deleteTask(task.id)}
-                      className="p-2 rounded bg-red-600 hover:bg-red-700"
-                      aria-label="Delete task"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Pomodoro Timers */}
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* 120-minute Timer */}
-              <div className={`${cardClass} rounded-lg shadow-lg p-6`}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold flex items-center gap-2">
-                    <Clock size={24} />
-                    Focus Session
-                  </h3>
-                  <span className={textSecondary}>120 minutes</span>
-                </div>
-                
-                <div className="text-center mb-6">
-                  <div className="text-6xl font-bold mb-4">
-                    {formatTime(pomodoro120.time)}
-                  </div>
-                  
-                  <div className="relative w-48 h-48 mx-auto">
-                    <svg className="transform -rotate-90 w-48 h-48">
-                      <circle
-                        cx="96"
-                        cy="96"
-                        r="88"
-                        stroke={darkMode ? '#374151' : '#e5e7eb'}
-                        strokeWidth="16"
-                        fill="none"
-                      />
-                      <circle
-                        cx="96"
-                        cy="96"
-                        r="88"
-                        stroke="#3b82f6"
-                        strokeWidth="16"
-                        fill="none"
-                        strokeDasharray={`${2 * Math.PI * 88}`}
-                        strokeDashoffset={`${2 * Math.PI * 88 * (1 - pomodoro120.time / (120 * 60))}`}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPomodoro120({ ...pomodoro120, running: !pomodoro120.running })}
-                    className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${
-                      pomodoro120.running
-                        ? 'bg-yellow-600 hover:bg-yellow-700'
-                        : 'bg-blue-600 hover:bg-blue-700'
-                    } text-white`}
-                  >
-                    {pomodoro120.running ? <Pause size={20} /> : <Play size={20} />}
-                    {pomodoro120.running ? 'Pause' : 'Start'}
-                  </button>
-                  <button
-                    onClick={() => setPomodoro120({ time: 120 * 60, running: false })}
-                    className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold"
-                    aria-label="Reset timer"
-                  >
-                    <RotateCcw size={20} />
-                  </button>
-                </div>
-              </div>
-
-              {/* 15-minute Timer */}
-              <div className={`${cardClass} rounded-lg shadow-lg p-6`}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold flex items-center gap-2">
-                    <Clock size={24} />
-                    Break Time
-                  </h3>
-                  <span className={textSecondary}>15 minutes</span>
-                </div>
-                
-                <div className="text-center mb-6">
-                  <div className="text-6xl font-bold mb-4">
-                    {formatTime(pomodoro15.time)}
-                  </div>
-                  
-                  <div className="relative w-48 h-48 mx-auto">
-                    <svg className="transform -rotate-90 w-48 h-48">
-                      <circle
-                        cx="96"
-                        cy="96"
-                        r="88"
-                        stroke={darkMode ? '#374151' : '#e5e7eb'}
-                        strokeWidth="16"
-                        fill="none"
-                      />
-                      <circle
-                        cx="96"
-                        cy="96"
-                        r="88"
-                        stroke="#10b981"
-                        strokeWidth="16"
-                        fill="none"
-                        strokeDasharray={`${2 * Math.PI * 88}`}
-                        strokeDashoffset={`${2 * Math.PI * 88 * (1 - pomodoro15.time / (15 * 60))}`}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPomodoro15({ ...pomodoro15, running: !pomodoro15.running })}
-                    className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold ${
-                      pomodoro15.running
-                        ? 'bg-yellow-600 hover:bg-yellow-700'
-                        : 'bg-green-600 hover:bg-green-700'
-                    } text-white`}
-                  >
-                    {pomodoro15.running ? <Pause size={20} /> : <Play size={20} />}
-                    {pomodoro15.running ? 'Pause' : 'Start'}
-                  </button>
-                  <button
-                    onClick={() => setPomodoro15({ time: 15 * 60, running: false })}
-                    className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold"
-                    aria-label="Reset timer"
-                  >
-                    <RotateCcw size={20} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export default TimetableTracker;.from({ length: getDaysInMonth(selectedYear, selectedMonth) }, (_, i) => (
-                        <th key={i} className="text-center p-1 text-sm">{i + 1}</th>
-                      ))}
-                      <th className="p-2">
-                        <button
-                          onClick={() => setShowAddHabit(!showAddHabit)}
-                          className="p-1 rounded bg-blue-600 hover:bg-blue-700"
-                          aria-label="Add habit"
-                        >
-                          <Plus size={16} />
-                        </button>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {habits.map(habit => (
-                      <tr key={habit.id}>
-                        <td className="p-2 font-semibold sticky left-0 bg-gray-800 z-10">
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: habit.color }} />
-                            {habit.name}
-                          </div>
-                        </td>
-                        {Array.from({ length: getDaysInMonth(selectedYear, selectedMonth) }, (_, day) => {
-                          const dateKey = formatDate(selectedYear, selectedMonth, day + 1);
-                          const completed = habitData[dateKey]?.[habit.id];
-                          return (
-                            <td key={day} className="text-center p-1">
-                              <button
-                                onClick={() => toggleHabit(habit.id, selectedYear, selectedMonth, day + 1)}
-                                className={`w-8 h-8 rounded-full border-2 transition-all ${
-                                  completed
-                                    ? `bg-${habit.color} border-transparent`
-                                    : darkMode ? 'border-gray-600' : 'border-gray-300'
-                                }`}
-                                style={completed ? { backgroundColor: habit.color } : {}}
-                                aria-label={`Toggle ${habit.name} for day ${day + 1}`}
-                              />
-                            </td>
-                          );
-                        })}
-                        <td className="p-2">
-                          <button
-                            onClick={() => deleteHabit(habit.id)}
-                            className="p-1 rounded bg-red-600 hover:bg-red-700"
-                            aria-label="Delete habit"
-                          >
-                            <X size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Add Habit Form */}
-              {showAddHabit && (
-                <div className="mt-4 flex gap-2">
-                  <input
-                    type="text"
-                    value={newHabitName}
-                    onChange={(e) => setNewHabitName(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && addHabit()}
-                    placeholder="New habit name..."
-                    className={`flex-1 p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                  />
-                  <button
-                    onClick={addHabit}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
-                  >
-                    Add
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Trend Graph */}
-            <div className={`${cardClass} rounded-lg shadow-lg p-6`}>
-              <h3 className="text-xl font-bold mb-4">Monthly Completion Trend</h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={getMonthlyCompletion(selectedYear, selectedMonth)}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#e5e7eb'} />
-                  <XAxis 
-                    dataKey="day" 
-                    stroke={darkMode ? '#9ca3af' : '#6b7280'}
-                    label={{ value: 'Day of Month', position: 'insideBottom', offset: -5 }}
-                  />
-                  <YAxis 
-                    stroke={darkMode ? '#9ca3af' : '#6b7280'}
-                    label={{ value: 'Completion %', angle: -90, position: 'insideLeft' }}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: darkMode ? '#1f2937' : '#ffffff',
-                      border: 'none',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="percentage" 
-                    stroke="#8b5cf6" 
-                    strokeWidth={3}
-                    dot={{ fill: '#8b5cf6', r: 4 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Goals Section */}
-            <div className={`${cardClass} rounded-lg shadow-lg p-6`}>
-              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <Target size={24} />
-                Goals & Targets
-              </h3>
-              <div className="space-y-4">
-                {habits.map(habit => {
-                  const days = getDaysInMonth(selectedYear, selectedMonth);
-                  let completed = 0;
-                  for (let day = 1; day <= days; day++) {
-                    const dateKey = formatDate(selectedYear, selectedMonth, day);
-                    if (habitData[dateKey]?.[habit.id]) completed++;
-                  }
-                  const percentage = (completed / days) * 100;
-                  
-                  return (
-                    <div key={habit.id}>
-                      <div className="flex justify-between mb-2">
-                        <span className="font-semibold">{habit.name}</span>
-                        <span>{completed}/{days} days ({Math.round(percentage)}%)</span>
-                      </div>
-                      <div className="w-full bg-gray-700 rounded-full h-3">
-                        <div
-                          className="h-3 rounded-full transition-all"
-                          style={{ 
-                            width: `${percentage}%`,
-                            backgroundColor: habit.color
-                          }}
-                        />
-                      </div>
+    <main class="max-w-7xl mx-auto p-6">
+        
+        <section id="page-tracker" class="space-y-8">
+            <div class="flex flex-col md:flex-row gap-6">
+                <div class="glass-card p-6 rounded-2xl w-full md:w-1/3 flex flex-col items-center justify-center">
+                    <h3 class="text-gray-400 mb-4 font-semibold uppercase text-xs tracking-widest">Monthly Progress</h3>
+                    <div class="relative w-40 h-40">
+                        <canvas id="monthlyProgressChart"></canvas>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <span id="progress-percent" class="text-3xl font-bold">0%</span>
+                        </div>
                     </div>
-                  );
-                })}
-              </div>
+                </div>
+                <div class="glass-card p-6 rounded-2xl flex-grow">
+                    <h3 class="text-gray-400 mb-4 font-semibold uppercase text-xs tracking-widest">Completion Trend</h3>
+                    <canvas id="trendChart" height="150"></canvas>
+                </div>
             </div>
-          </div>
-        )}
 
-        {/* CALENDAR PAGE */}
-        {currentPage === 'calendar' && (
-          <div className="space-y-6">
-            <div className={`${cardClass} rounded-lg shadow-lg p-6`}>
-              <div className="flex justify-between items-center mb-6">
-                <button
-                  onClick={() => {
-                    if (calendarMonth === 0) {
-                      setCalendarMonth(11);
-                      setCalendarYear(calendarYear - 1);
-                    } else {
-                      setCalendarMonth(calendarMonth - 1);
-                    }
-                  }}
-                  className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <h2 className="text-2xl font-bold">
-                  {monthNames[calendarMonth]} {calendarYear}
-                </h2>
-                <button
-                  onClick={() => {
-                    if (calendarMonth === 11) {
-                      setCalendarMonth(0);
-                      setCalendarYear(calendarYear + 1);
-                    } else {
-                      setCalendarMonth(calendarMonth + 1);
-                    }
-                  }}
-                  className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </div>
+            <div class="glass-card rounded-2xl overflow-hidden">
+                <div class="p-6 border-b border-white/5 flex justify-between items-center">
+                    <h3 class="font-bold">Habit Matrix - <span id="current-month-name">October</span></h3>
+                    <button onclick="addNewHabit()" class="bg-violet-600 hover:bg-violet-700 px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition">
+                        <i data-lucide="plus" class="w-4 h-4"></i> Add Habit
+                    </button>
+                </div>
+                <div id="habit-grid-root" class="habit-grid custom-scrollbar p-6 bg-[#131318]">
+                    </div>
+            </div>
+        </section>
 
-              {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-2">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="text-center font-bold p-2">
-                    {day}
-                  </div>
-                ))}
-                {Array.from({ length: new Date(calendarYear, calendarMonth, 1).getDay() }, (_, i) => (
-                  <div key={`empty-${i}`} />
-                ))}
-                {Array
+        <section id="page-calendar" class="hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 glass-card p-6 rounded-2xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 id="cal-month-display" class="text-xl font-bold">Month Year</h3>
+                        <div class="flex gap-2">
+                            <button onclick="changeMonth(-1)" class="p-2 hover:bg-white/5 rounded-lg"><i data-lucide="chevron-left"></i></button>
+                            <button onclick="changeMonth(1)" class="p-2 hover:bg-white/5 rounded-lg"><i data-lucide="chevron-right"></i></button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-7 gap-2 text-center text-xs text-gray-500 mb-4">
+                        <div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div>
+                    </div>
+                    <div id="calendar-grid" class="grid grid-cols-7 gap-2">
+                        </div>
+                </div>
+                <div class="glass-card p-6 rounded-2xl space-y-4">
+                    <h3 id="selected-date-label" class="text-violet-400 font-bold">Select a date</h3>
+                    <div>
+                        <label class="text-xs text-gray-500 uppercase">Daily Journal</label>
+                        <textarea id="journal-input" class="w-full h-48 bg-black/30 border border-white/10 rounded-xl p-4 mt-2 focus:border-violet-500 outline-none transition text-sm" placeholder="How was your day?"></textarea>
+                    </div>
+                    <button onclick="saveJournal()" class="w-full bg-white/5 hover:bg-white/10 py-2 rounded-xl text-sm transition font-semibold">Save Notes</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="page-tasks" class="hidden space-y-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="glass-card p-8 rounded-3xl">
+                    <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+                        <i data-lucide="check-circle" class="text-blue-500"></i> Today's Tasks
+                    </h2>
+                    <div class="flex gap-2 mb-6">
+                        <input type="text" id="task-input" class="flex-grow bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:ring-2 ring-violet-500 outline-none" placeholder="What needs to be done?">
+                        <button onclick="addTask()" class="bg-violet-600 px-6 rounded-xl hover:bg-violet-700 transition"><i data-lucide="plus"></i></button>
+                    </div>
+                    <ul id="task-list" class="space-y-3">
+                        </ul>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="glass-card p-8 rounded-3xl border-l-4 border-violet-600">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-bold flex items-center gap-2"><i data-lucide="flame" class="text-orange-500"></i> DEEP WORK</h3>
+                            <span class="text-xs bg-violet-600/20 text-violet-400 px-2 py-1 rounded">120 MIN</span>
+                        </div>
+                        <div id="timer-deep" class="pomo-timer text-6xl font-black text-center mb-6">120:00</div>
+                        <div class="flex gap-2">
+                            <button onclick="toggleTimer('deep', 120)" class="flex-grow bg-white/10 hover:bg-white/20 py-3 rounded-xl transition font-bold uppercase tracking-widest text-xs">Start / Pause</button>
+                            <button onclick="resetTimer('deep', 120)" class="px-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl transition"><i data-lucide="rotate-ccw"></i></button>
+                        </div>
+                    </div>
+                    <div class="glass-card p-8 rounded-3xl border-l-4 border-blue-500">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-bold flex items-center gap-2"><i data-lucide="coffee" class="text-blue-400"></i> BREAK</h3>
+                            <span class="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded">15 MIN</span>
+                        </div>
+                        <div id="timer-break" class="pomo-timer text-6xl font-black text-center mb-6">15:00</div>
+                        <div class="flex gap-2">
+                            <button onclick="toggleTimer('break', 15)" class="flex-grow bg-white/10 hover:bg-white/20 py-3 rounded-xl transition font-bold uppercase tracking-widest text-xs">Start / Pause</button>
+                            <button onclick="resetTimer('break', 15)" class="px-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl transition"><i data-lucide="rotate-ccw"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- DATA STATE ---
+        let state = JSON.parse(localStorage.getItem('timetable_data')) || {
+            habits: ["Wake up (2-4 AM)", "Workout", "Study 18 Hours", "No Porn", "No Games"],
+            completions: {}, // format: "2023-10-24": ["Habit1", "Habit2"]
+            journals: {},
+            tasks: [],
+            currentMonth: new Date().getMonth(),
+            currentYear: new Date().getFullYear()
+        };
+
+        function saveState() {
+            localStorage.setItem('timetable_data', JSON.stringify(state));
+            updateCharts();
+        }
+
+        // --- NAVIGATION ---
+        function switchTab(tabId) {
+            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
+            
+            document.getElementById('page-' + tabId).classList.remove('hidden');
+            document.getElementById('nav-' + tabId).classList.add('active-tab');
+            
+            if(tabId === 'tracker') renderTracker();
+            if(tabId === 'calendar') renderCalendar();
+            if(tabId === 'tasks') renderTasks();
+        }
+
+        // --- TRACKER LOGIC ---
+        function renderTracker() {
+            const root = document.getElementById('habit-grid-root');
+            const daysInMonth = new Date(state.currentYear, state.currentMonth + 1, 0).getDate();
+            document.getElementById('current-month-name').innerText = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(state.currentYear, state.currentMonth));
+
+            let html = `<div class="font-bold text-gray-500 text-xs">HABIT</div>`;
+            for (let i = 1; i <= daysInMonth; i++) {
+                html += `<div class="text-center text-xs font-bold text-gray-600">${i}</div>`;
+            }
+
+            state.habits.forEach(habit => {
+                html += `<div class="py-2 text-sm font-medium border-b border-white/5 truncate pr-4">${habit}</div>`;
+                for (let i = 1; i <= daysInMonth; i++) {
+                    const dateKey = `${state.currentYear}-${state.currentMonth}-${i}`;
+                    const isDone = state.completions[dateKey]?.includes(habit);
+                    html += `
+                        <div class="flex items-center justify-center border-b border-white/5 py-2">
+                            <button onclick="toggleHabit('${dateKey}', '${habit}')" 
+                                class="w-5 h-5 rounded-full border border-white/20 transition ${isDone ? 'checked-circle' : 'hover:border-violet-500'}">
+                            </button>
+                        </div>`;
+                }
+            });
+            root.innerHTML = html;
+        }
+
+        function toggleHabit(dateKey, habit) {
+            if (!state.completions[dateKey]) state.completions[dateKey] = [];
+            const index = state.completions[dateKey].indexOf(habit);
+            if (index > -1) state.completions[dateKey].splice(index, 1);
+            else state.completions[dateKey].push(habit);
+            saveState();
+            renderTracker();
+        }
+
+        function addNewHabit() {
+            const name = prompt("Enter habit name:");
+            if (name) {
+                state.habits.push(name);
+                saveState();
+                renderTracker();
+            }
+        }
+
+        // --- CALENDAR LOGIC ---
+        let selectedDate = null;
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendar-grid');
+            const firstDay = new Date(state.currentYear, state.currentMonth, 1).getDay();
+            const daysInMonth = new Date(state.currentYear, state.currentMonth + 1, 0).getDate();
+            
+            document.getElementById('cal-month-display').innerText = `${new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(state.currentYear, state.currentMonth))} ${state.currentYear}`;
+            
+            let html = '';
+            for (let i = 0; i < firstDay; i++) html += '<div></div>';
+            
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateKey = `${state.currentYear}-${state.currentMonth}-${i}`;
+                const hasNote = state.journals[dateKey] ? 'border-t-2 border-violet-500' : '';
+                html += `
+                    <button onclick="selectDate('${dateKey}')" class="aspect-square glass-card rounded-lg flex flex-col items-center justify-center hover:bg-violet-600/20 transition ${hasNote}">
+                        <span class="text-sm">${i}</span>
+                    </button>`;
+            }
+            grid.innerHTML = html;
+        }
+
+        function selectDate(key) {
+            selectedDate = key;
+            document.getElementById('selected-date-label').innerText = key;
+            document.getElementById('journal-input').value = state.journals[key] || "";
+        }
+
+        function saveJournal() {
+            if (!selectedDate) return alert("Select a date first");
+            state.journals[selectedDate] = document.getElementById('journal-input').value;
+            saveState();
+            renderCalendar();
+        }
+
+        function changeMonth(dir) {
+            state.currentMonth += dir;
+            if (state.currentMonth > 11) { state.currentMonth = 0; state.currentYear++; }
+            if (state.currentMonth < 0) { state.currentMonth = 11; state.currentYear--; }
+            renderCalendar();
+            renderTracker();
+        }
+
+        // --- TASKS & POMODORO ---
+        function renderTasks() {
+            const list = document.getElementById('task-list');
+            list.innerHTML = state.tasks.map((t, i) => `
+                <li class="flex items-center gap-4 bg-white/5 p-4 rounded-xl group">
+                    <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${i})" class="w-5 h-5 rounded border-white/20">
+                    <span class="flex-grow ${t.done ? 'line-through text-gray-500' : ''}">${t.text}</span>
+                    <button onclick="deleteTask(${i})" class="opacity-0 group-hover:opacity-100 text-red-500 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </li>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function addTask() {
+            const input = document.getElementById('task-input');
+            if (input.value) {
+                state.tasks.push({ text: input.value, done: false });
+                input.value = '';
+                saveState();
+                renderTasks();
+            }
+        }
+
+        function toggleTask(i) {
+            state.tasks[i].done = !state.tasks[i].done;
+            saveState();
+            renderTasks();
+        }
+
+        function deleteTask(i) {
+            state.tasks.splice(i, 1);
+            saveState();
+            renderTasks();
+        }
+
+        // Timer Logic
+        let intervals = { deep: null, break: null };
+        let times = { deep: 120 * 60, break: 15 * 60 };
+
+        function toggleTimer(type, defaultMin) {
+            if (intervals[type]) {
+                clearInterval(intervals[type]);
+                intervals[type] = null;
+            } else {
+                intervals[type] = setInterval(() => {
+                    times[type]--;
+                    updateTimerUI(type);
+                    if (times[type] <= 0) {
+                        clearInterval(intervals[type]);
+                        new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
+                        alert(`${type.toUpperCase()} Finished!`);
+                    }
+                }, 1000);
+            }
+        }
+
+        function resetTimer(type, min) {
+            clearInterval(intervals[type]);
+            intervals[type] = null;
+            times[type] = min * 60;
+            updateTimerUI(type);
+        }
+
+        function updateTimerUI(type) {
+            const m = Math.floor(times[type] / 60);
+            const s = times[type] % 60;
+            document.getElementById(`timer-${type}`).innerText = `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        // --- CHARTS ---
+        let trendChart, progressChart;
+
+        function updateCharts() {
+            const daysInMonth = new Date(state.currentYear, state.currentMonth + 1, 0).getDate();
+            const labels = Array.from({length: daysInMonth}, (_, i) => i + 1);
+            const dataPoints = labels.map(day => {
+                const key = `${state.currentYear}-${state.currentMonth}-${day}`;
+                const count = state.completions[key]?.length || 0;
+                return (count / state.habits.length) * 100;
+            });
+
+            const avgTotal = dataPoints.reduce((a,b) => a+b, 0) / daysInMonth;
+            document.getElementById('progress-percent').innerText = Math.round(avgTotal) + '%';
+
+            if (trendChart) trendChart.destroy();
+            trendChart = new Chart(document.getElementById('trendChart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Completion %',
+                        data: dataPoints,
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, max: 100, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+
+            if (progressChart) progressChart.destroy();
+            progressChart = new Chart(document.getElementById('monthlyProgressChart'), {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [avgTotal, 100 - avgTotal],
+                        backgroundColor: ['#3b82f6', '#1a1a1f'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }
+            });
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "timetable_backup.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        // Initialize
+        lucide.createIcons();
+        renderTracker();
+        updateCharts();
+
+    </script>
+</body>
+</html>
