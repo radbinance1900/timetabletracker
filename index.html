@@ -1,336 +1,433 @@
+
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Timetable Tracker | Original Edition</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FocusFinder</title>
+    <!-- Pixel square font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
-        
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0f0f12;
-            color: #ffffff;
-            overflow-x: hidden;
-        }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-        .glass-card {
-            background: rgba(26, 26, 31, 0.8);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(139, 92, 246, 0.1);
-        }
+      body {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #000000;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
 
-        /* FIXED: Dynamic Habit Matrix Grid */
-        .habit-grid-container {
-            overflow-x: auto;
-        }
-        #habit-grid-root {
-            display: grid;
-            background-color: #131318;
-            min-width: max-content;
-        }
+      #app {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+      }
 
-        .habit-name-cell {
-            position: sticky;
-            left: 0;
-            background-color: #131318;
-            z-index: 10;
-            width: 150px;
-            padding-left: 1rem;
-            border-right: 1px solid rgba(255,255,255,0.05);
-        }
+      #display {
+        /* Eyes canvas - native 128x64 scaled up */
+        width: 512px;
+        height: 256px;
+        background: #000;
+        border-radius: 12px;
+        transition: filter 1s ease;
+      }
 
-        .custom-scrollbar::-webkit-scrollbar {
-            height: 6px;
-            width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #4b5563;
-            border-radius: 10px;
-        }
+      /* Red eyes when distracted for too long */
+      #display.red-eyes {
+        filter: sepia(100%) saturate(300%) hue-rotate(-20deg);
+      }
 
-        .active-tab {
-            color: #8b5cf6;
-            border-bottom: 2px solid #8b5cf6;
-        }
+      #timer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 512px;
+        height: 56px;
+        background: #000;
+        border-radius: 12px;
+        font-family: 'Press Start 2P', monospace;
+        font-size: 28px;
+        font-weight: normal;
+        letter-spacing: 3px;
+        color: #ffffff;
+        transition: color 0.5s ease, text-shadow 0.5s ease;
+      }
 
-        .pomo-timer, .stopwatch-display {
-            font-variant-numeric: tabular-nums;
-        }
+      /* Distracted state - stays visible, warms up to red */
+      #timer.distracted {
+        color: #ff6b6b;
+        text-shadow: 0 0 10px rgba(255, 100, 100, 0.5);
+        animation: distracted-pulse 1s ease-in-out infinite;
+      }
 
-        .checked-circle {
-            background: #3b82f6;
-            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
-        }
+      /* Warning states - progressive urgency */
+      #timer.warning-low {
+        color: #ffcc66;
+        text-shadow: 0 0 5px rgba(255, 200, 100, 0.3);
+      }
+
+      #timer.warning-medium {
+        color: #ff9944;
+        text-shadow: 0 0 8px rgba(255, 150, 50, 0.4);
+      }
+
+      #timer.warning-high {
+        color: #ff5533;
+        text-shadow: 0 0 12px rgba(255, 80, 50, 0.6);
+        animation: urgent-pulse 0.5s ease-in-out infinite;
+      }
+
+      #timer.warning-critical {
+        color: #ff2222;
+        text-shadow: 0 0 15px rgba(255, 30, 30, 0.8);
+        animation: critical-pulse 0.3s ease-in-out infinite;
+      }
+
+      @keyframes distracted-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+
+      @keyframes urgent-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.8; transform: scale(1.02); }
+      }
+
+      @keyframes critical-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.9; transform: scale(1.05); }
+      }
+
+      /* Status bar - Brutalist */
+      #status {
+        font-family: monospace;
+        font-size: 11px;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 8px 16px;
+        background: #000;
+        border: 2px solid #333;
+        color: #666;
+      }
+
+      #status.loading {
+        color: #f0a500;
+        border-color: #f0a500;
+      }
+
+      #status.ready {
+        color: #4ecca3;
+        border-color: #4ecca3;
+      }
+
+      #status.error {
+        color: #ff6b6b;
+        border-color: #ff6b6b;
+      }
+
+      /* Camera preview with overlay for debug - Brutalist */
+      #camera-container {
+        position: relative;
+        width: 320px;
+        height: 240px;
+        border: 2px solid #fff;
+        background: #000;
+      }
+
+      #camera {
+        width: 320px;
+        height: 240px;
+        transform: scaleX(-1); /* Mirror the camera */
+        display: block;
+      }
+
+      #camera-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 320px;
+        height: 240px;
+        pointer-events: none;
+        transform: scaleX(-1); /* Mirror to match video */
+      }
+
+      /* Debug panel - Brutalist */
+      #debug {
+        font-family: monospace;
+        font-size: 11px;
+        text-align: left;
+        width: 320px;
+        padding: 0;
+        background: #000;
+        border: 2px solid #fff;
+        min-height: 60px;
+        color: #888;
+      }
+
+      #debug-header {
+        background: #fff;
+        color: #000;
+        padding: 6px 10px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-size: 10px;
+      }
+
+      #debug-content {
+        padding: 10px;
+      }
+
+      #debug-content div {
+        margin-bottom: 4px;
+      }
+
+      #debug-content div:last-child {
+        margin-bottom: 0;
+      }
+
+      /* Debug toggle button */
+      #debug-toggle {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 1px solid #333;
+        background: #111;
+        color: #666;
+        font-size: 18px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s, opacity 0.3s ease;
+        opacity: 1;
+      }
+
+      #debug-toggle:hover {
+        background: #222;
+        color: #fff;
+        border-color: #555;
+      }
+
+      #debug-toggle.active {
+        color: #4ecca3;
+        border-color: #4ecca3;
+      }
+
+      #debug-toggle.hidden-inactive {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* Debug settings panel - Brutalist UI */
+      #debug-settings {
+        position: fixed;
+        bottom: 70px;
+        right: 20px;
+        background: #000;
+        border: 2px solid #fff;
+        padding: 0;
+        font-family: monospace;
+        font-size: 11px;
+        min-width: 180px;
+        display: none;
+        z-index: 100;
+      }
+
+      #debug-settings.visible {
+        display: block;
+      }
+
+      #debug-settings-header {
+        background: #fff;
+        color: #000;
+        padding: 8px 12px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-size: 10px;
+      }
+
+      .debug-setting-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        border-bottom: 1px solid #333;
+        color: #fff;
+      }
+
+      .debug-setting-row:last-child {
+        border-bottom: none;
+      }
+
+      .debug-setting-label {
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 10px;
+      }
+
+      /* Brutalist toggle switch */
+      .brutalist-toggle {
+        position: relative;
+        width: 40px;
+        height: 20px;
+        background: #000;
+        border: 2px solid #666;
+        cursor: pointer;
+        transition: border-color 0.15s;
+      }
+
+      .brutalist-toggle::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 12px;
+        height: 12px;
+        background: #666;
+        transition: transform 0.15s, background 0.15s;
+      }
+
+      .brutalist-toggle.on {
+        border-color: #fff;
+      }
+
+      .brutalist-toggle.on::after {
+        transform: translateX(20px);
+        background: #fff;
+      }
+
+      .brutalist-toggle:hover {
+        border-color: #888;
+      }
+
+      .brutalist-toggle.on:hover {
+        border-color: #ccc;
+      }
+
+      /* Hide debug elements when not active */
+      .debug-hidden #camera-container,
+      .debug-hidden #status,
+      .debug-hidden #debug {
+        display: none;
+      }
     </style>
-</head>
-<body class="min-h-screen">
+    <script type="module" crossorigin src="/assets/index-Trc84Ehr.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="display" width="512" height="256"></canvas>
+      <div id="timer">00:00</div>
+      <div id="camera-container">
+        <video id="camera" autoplay playsinline></video>
+        <canvas id="camera-overlay" width="320" height="240"></canvas>
+      </div>
+      <div id="status" class="loading">Loading face detection model...</div>
+      <div id="debug">
+        <div id="debug-header">Debug</div>
+        <div id="debug-content">Waiting for data...</div>
+      </div>
+    </div>
+    <button id="debug-toggle" title="Toggle debug mode">⚙</button>
 
-    <nav class="sticky top-0 z-50 glass-card border-b border-white/10 px-6 py-4 flex justify-between items-center">
-        <div class="flex items-center gap-4">
-            <div class="flex items-center gap-2">
-                <i data-lucide="target" class="text-violet-500"></i>
-                <span class="text-xl font-bold tracking-tighter hidden md:inline">TIMETABLE TRACKER</span>
-            </div>
-            <div class="bg-white/5 border border-white/10 px-3 py-1 rounded-lg font-mono text-sm text-violet-400">
-                <span id="ist-clock">00:00:00</span> <span class="text-[10px] text-gray-500">IST</span>
-            </div>
-        </div>
-        <div class="flex gap-6 text-sm font-medium text-gray-400">
-            <button onclick="switchTab('tracker')" id="nav-tracker" class="hover:text-white transition active-tab">TRACKER</button>
-            <button onclick="switchTab('calendar')" id="nav-calendar" class="hover:text-white transition">CALENDAR</button>
-            <button onclick="switchTab('tasks')" id="nav-tasks" class="hover:text-white transition">TASKS</button>
-            <button onclick="switchTab('stopwatch')" id="nav-stopwatch" class="hover:text-white transition">STOPWATCH</button>
-        </div>
-        <div class="flex gap-4">
-            <button onclick="exportData()" class="p-2 hover:bg-white/5 rounded-lg"><i data-lucide="download" class="w-5 h-5"></i></button>
-        </div>
-    </nav>
-
-    <main class="max-w-7xl mx-auto p-6">
-        
-        <section id="page-tracker" class="space-y-8">
-            <div class="flex flex-col md:flex-row gap-6">
-                <div class="glass-card p-6 rounded-2xl w-full md:w-1/3 flex flex-col items-center justify-center">
-                    <h3 class="text-gray-400 mb-4 font-semibold uppercase text-xs tracking-widest">Monthly Progress</h3>
-                    <div class="relative w-40 h-40">
-                        <canvas id="monthlyProgressChart"></canvas>
-                        <div class="absolute inset-0 flex items-center justify-center">
-                            <span id="progress-percent" class="text-3xl font-bold">0%</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="glass-card p-6 rounded-2xl flex-grow">
-                    <h3 class="text-gray-400 mb-4 font-semibold uppercase text-xs tracking-widest">Completion Trend</h3>
-                    <canvas id="trendChart" height="150"></canvas>
-                </div>
-            </div>
-
-            <div class="glass-card rounded-2xl overflow-hidden">
-                <div class="p-6 border-b border-white/5 flex justify-between items-center">
-                    <h3 class="font-bold">Habit Matrix - <span id="current-month-name">Month</span></h3>
-                    <div class="flex gap-2">
-                        <button onclick="changeMonth(-1)" class="p-1.5 hover:bg-white/10 rounded-lg transition"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
-                        <button onclick="changeMonth(1)" class="p-1.5 hover:bg-white/10 rounded-lg transition"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
-                        <button onclick="addNewHabit()" class="bg-violet-600 hover:bg-violet-700 px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition ml-4">
-                            <i data-lucide="plus" class="w-4 h-4"></i> Add Habit
-                        </button>
-                    </div>
-                </div>
-                <div class="habit-grid-container custom-scrollbar bg-[#131318]">
-                    <div id="habit-grid-root" class="p-6">
-                        </div>
-                </div>
-            </div>
-        </section>
-
-        <section id="page-calendar" class="hidden space-y-6">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="lg:col-span-2 glass-card p-6 rounded-2xl">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 id="cal-month-display" class="text-xl font-bold">Month Year</h3>
-                        <div class="flex gap-2">
-                            <button onclick="changeMonth(-1)" class="p-2 hover:bg-white/5 rounded-lg"><i data-lucide="chevron-left"></i></button>
-                            <button onclick="changeMonth(1)" class="p-2 hover:bg-white/5 rounded-lg"><i data-lucide="chevron-right"></i></button>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-7 gap-2 text-center text-xs text-gray-500 mb-4">
-                        <div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div>
-                    </div>
-                    <div id="calendar-grid" class="grid grid-cols-7 gap-2"></div>
-                </div>
-                <div class="glass-card p-6 rounded-2xl space-y-4">
-                    <h3 id="selected-date-label" class="text-violet-400 font-bold">Select a date</h3>
-                    <textarea id="journal-input" class="w-full h-48 bg-black/30 border border-white/10 rounded-xl p-4 text-sm outline-none focus:border-violet-500" placeholder="Journal entries..."></textarea>
-                    <button onclick="saveJournal()" class="w-full bg-white/5 hover:bg-white/10 py-2 rounded-xl text-sm transition font-semibold">Save Notes</button>
-                </div>
-            </div>
-        </section>
-
-        <section id="page-tasks" class="hidden space-y-8">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div class="glass-card p-8 rounded-3xl">
-                    <h2 class="text-2xl font-bold mb-6 flex items-center gap-2"><i data-lucide="check-circle" class="text-blue-500"></i> Today's Tasks</h2>
-                    <div class="flex gap-2 mb-6">
-                        <input type="text" id="task-input" class="flex-grow bg-black/40 border border-white/10 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-violet-500" placeholder="Add task...">
-                        <button onclick="addTask()" class="bg-violet-600 px-6 rounded-xl hover:bg-violet-700 transition"><i data-lucide="plus"></i></button>
-                    </div>
-                    <ul id="task-list" class="space-y-3"></ul>
-                </div>
-                <div class="space-y-6">
-                    <div class="glass-card p-8 rounded-3xl border-l-4 border-violet-600">
-                        <h3 class="font-bold mb-4">DEEP WORK (120M)</h3>
-                        <div id="timer-deep" class="pomo-timer text-6xl font-black text-center mb-6">120:00</div>
-                        <div class="flex gap-2">
-                            <button onclick="toggleTimer('deep', 120)" class="flex-grow bg-white/10 py-3 rounded-xl hover:bg-white/20 font-bold text-xs uppercase">Start / Pause</button>
-                            <button onclick="resetTimer('deep', 120)" class="px-4 bg-red-500/10 text-red-500 rounded-xl"><i data-lucide="rotate-ccw"></i></button>
-                        </div>
-                    </div>
-                    <div class="glass-card p-8 rounded-3xl border-l-4 border-blue-500">
-                        <h3 class="font-bold mb-4">BREAK (15M)</h3>
-                        <div id="timer-break" class="pomo-timer text-6xl font-black text-center mb-6">15:00</div>
-                        <div class="flex gap-2">
-                            <button onclick="toggleTimer('break', 15)" class="flex-grow bg-white/10 py-3 rounded-xl hover:bg-white/20 font-bold text-xs uppercase">Start / Pause</button>
-                            <button onclick="resetTimer('break', 15)" class="px-4 bg-red-500/10 text-red-500 rounded-xl"><i data-lucide="rotate-ccw"></i></button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section id="page-stopwatch" class="hidden flex flex-col items-center justify-center py-20">
-            <div class="glass-card p-12 rounded-[40px] text-center w-full max-w-lg">
-                <h2 class="text-xl font-bold text-gray-400 mb-8 uppercase tracking-widest">Study Session Counter</h2>
-                <div id="sw-display" class="stopwatch-display text-8xl font-black mb-12 tracking-tighter">00:00:00</div>
-                <div class="flex gap-4 justify-center">
-                    <button id="sw-btn-toggle" onclick="toggleStopwatch()" class="px-10 py-4 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl font-bold uppercase transition flex items-center gap-2">
-                        <i data-lucide="play"></i> Start
-                    </button>
-                    <button onclick="resetStopwatch()" class="px-8 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-bold uppercase transition">Reset</button>
-                </div>
-            </div>
-        </section>
-
-    </main>
+    <!-- Debug Settings Panel - Brutalist UI -->
+    <div id="debug-settings">
+      <div id="debug-settings-header">Settings</div>
+      <div class="debug-setting-row">
+        <span class="debug-setting-label">Audio</span>
+        <div id="toggle-audio" class="brutalist-toggle on" title="Toggle sound effects"></div>
+      </div>
+      <div class="debug-setting-row">
+        <span class="debug-setting-label">Debug View</span>
+        <div id="toggle-debug-view" class="brutalist-toggle" title="Show debug info"></div>
+      </div>
+    </div>
 
     <script>
-        // --- DATA ---
-        let state = JSON.parse(localStorage.getItem('timetable_data')) || {
-            habits: ["Wake up (2-4 AM)", "Workout", "Study 18 Hours", "No Porn", "No Games"],
-            completions: {}, journals: {}, tasks: [], currentMonth: new Date().getMonth(), currentYear: new Date().getFullYear()
-        };
+      // Debug toggle & settings
+      const toggle = document.getElementById('debug-toggle');
+      const app = document.getElementById('app');
+      const settingsPanel = document.getElementById('debug-settings');
+      const toggleAudio = document.getElementById('toggle-audio');
+      const toggleDebugView = document.getElementById('toggle-debug-view');
 
-        function saveState() {
-            localStorage.setItem('timetable_data', JSON.stringify(state));
-            updateCharts();
+      let inactivityTimer = null;
+      const INACTIVITY_TIMEOUT = 5000;
+
+      // Show/hide settings panel on gear click
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        settingsPanel.classList.toggle('visible');
+        toggle.classList.toggle('active', settingsPanel.classList.contains('visible'));
+        resetInactivityTimer();
+      });
+
+      // Audio toggle
+      toggleAudio.addEventListener('click', () => {
+        toggleAudio.classList.toggle('on');
+        const enabled = toggleAudio.classList.contains('on');
+        // Dispatch custom event for main.ts to handle
+        window.dispatchEvent(new CustomEvent('audioToggle', { detail: { enabled } }));
+        resetInactivityTimer();
+      });
+
+      // Debug view toggle
+      toggleDebugView.addEventListener('click', () => {
+        toggleDebugView.classList.toggle('on');
+        const showDebug = toggleDebugView.classList.contains('on');
+        app.classList.toggle('debug-hidden', !showDebug);
+        resetInactivityTimer();
+      });
+
+      // Close settings panel when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!settingsPanel.contains(e.target) && e.target !== toggle) {
+          settingsPanel.classList.remove('visible');
+          toggle.classList.remove('active');
         }
+      });
 
-        // --- IST CLOCK ---
-        function updateClock() {
-            const now = new Date();
-            const options = { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
-            document.getElementById('ist-clock').innerText = new Intl.DateTimeFormat('en-GB', options).format(now);
+      // Inactivity auto-hide for debug toggle button
+      function hideToggleButton() {
+        // Only hide if settings panel is not open
+        if (!settingsPanel.classList.contains('visible')) {
+          toggle.classList.add('hidden-inactive');
         }
-        setInterval(updateClock, 1000);
-        updateClock();
+      }
 
-        // --- NAVIGATION ---
-        function switchTab(tabId) {
-            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
-            document.getElementById('page-' + tabId).classList.remove('hidden');
-            document.getElementById('nav-' + tabId).classList.add('active-tab');
-            if(tabId === 'tracker') renderTracker();
-            if(tabId === 'calendar') renderCalendar();
-            if(tabId === 'tasks') renderTasks();
-        }
+      function showToggleButton() {
+        toggle.classList.remove('hidden-inactive');
+      }
 
-        // --- HABIT GRID (DYNAMIC FIX) ---
-        function renderTracker() {
-            const root = document.getElementById('habit-grid-root');
-            const daysInMonth = new Date(state.currentYear, state.currentMonth + 1, 0).getDate();
-            document.getElementById('current-month-name').innerText = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(state.currentYear, state.currentMonth));
-            
-            root.style.gridTemplateColumns = `150px repeat(${daysInMonth}, minmax(30px, 1fr))`;
+      function resetInactivityTimer() {
+        showToggleButton();
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(hideToggleButton, INACTIVITY_TIMEOUT);
+      }
 
-            let html = `<div class="font-bold text-gray-500 text-xs habit-name-cell py-2">HABIT</div>`;
-            for (let i = 1; i <= daysInMonth; i++) html += `<div class="text-center text-xs font-bold text-gray-600 py-2">${i}</div>`;
+      // Track user activity
+      ['mousemove', 'mousedown', 'touchstart', 'touchmove', 'keydown', 'scroll'].forEach(event => {
+        document.addEventListener(event, resetInactivityTimer, { passive: true });
+      });
 
-            state.habits.forEach(habit => {
-                html += `<div class="py-2 text-sm font-medium border-b border-white/5 truncate pr-4 habit-name-cell">${habit}</div>`;
-                for (let i = 1; i <= daysInMonth; i++) {
-                    const dateKey = `${state.currentYear}-${state.currentMonth}-${i}`;
-                    const isDone = state.completions[dateKey]?.includes(habit);
-                    html += `<div class="flex items-center justify-center border-b border-white/5 py-2"><button onclick="toggleHabit('${dateKey}', '${habit}')" class="w-5 h-5 rounded-full border border-white/20 transition ${isDone ? 'checked-circle' : ''}"></button></div>`;
-                }
-            });
-            root.innerHTML = html;
-        }
-
-        function toggleHabit(key, h) {
-            if (!state.completions[key]) state.completions[key] = [];
-            const idx = state.completions[key].indexOf(h);
-            idx > -1 ? state.completions[key].splice(idx, 1) : state.completions[key].push(h);
-            saveState(); renderTracker();
-        }
-
-        function changeMonth(dir) {
-            state.currentMonth += dir;
-            if (state.currentMonth > 11) { state.currentMonth = 0; state.currentYear++; }
-            if (state.currentMonth < 0) { state.currentMonth = 11; state.currentYear--; }
-            renderTracker(); renderCalendar();
-        }
-
-        function addNewHabit() {
-            const n = prompt("Habit name:");
-            if (n) { state.habits.push(n); saveState(); renderTracker(); }
-        }
-
-        // --- CALENDAR ---
-        function renderCalendar() {
-            const grid = document.getElementById('calendar-grid');
-            const first = new Date(state.currentYear, state.currentMonth, 1).getDay();
-            const days = new Date(state.currentYear, state.currentMonth + 1, 0).getDate();
-            document.getElementById('cal-month-display').innerText = `${new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(state.currentYear, state.currentMonth))} ${state.currentYear}`;
-            let html = '';
-            for (let i = 0; i < first; i++) html += '<div></div>';
-            for (let i = 1; i <= days; i++) {
-                const key = `${state.currentYear}-${state.currentMonth}-${i}`;
-                html += `<button onclick="selectDate('${key}')" class="aspect-square glass-card rounded-lg flex items-center justify-center text-sm ${state.journals[key] ? 'border-t-2 border-violet-500' : ''}">${i}</button>`;
-            }
-            grid.innerHTML = html;
-        }
-
-        function selectDate(k) {
-            document.getElementById('selected-date-label').innerText = k;
-            document.getElementById('journal-input').value = state.journals[k] || "";
-            window.activeDate = k;
-        }
-
-        function saveJournal() {
-            if (window.activeDate) { state.journals[window.activeDate] = document.getElementById('journal-input').value; saveState(); renderCalendar(); }
-        }
-
-        // --- STOPWATCH ---
-        let swInt, swSec = 0, swOn = false;
-        function toggleStopwatch() {
-            const b = document.getElementById('sw-btn-toggle');
-            if (swOn) { clearInterval(swInt); swOn = false; b.innerHTML = '<i data-lucide="play"></i> Start'; }
-            else {
-                swOn = true; b.innerHTML = '<i data-lucide="pause"></i> Pause';
-                swInt = setInterval(() => { swSec++; const h = Math.floor(swSec/3600).toString().padStart(2,'0'), m = Math.floor((swSec%3600)/60).toString().padStart(2,'0'), s = (swSec%60).toString().padStart(2,'0'); document.getElementById('sw-display').innerText = `${h}:${m}:${s}`; }, 1000);
-            }
-            lucide.createIcons();
-        }
-        function resetStopwatch() { clearInterval(swInt); swOn = false; swSec = 0; document.getElementById('sw-display').innerText = "00:00:00"; document.getElementById('sw-btn-toggle').innerHTML = '<i data-lucide="play"></i> Start'; lucide.createIcons(); }
-
-        // --- OTHER UTILS ---
-        function renderTasks() { document.getElementById('task-list').innerHTML = state.tasks.map((t, i) => `<li class="flex items-center gap-4 bg-white/5 p-4 rounded-xl"> <input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${i})" class="w-5 h-5"> <span class="flex-grow ${t.done?'line-through text-gray-500':''}">${t.text}</span> <button onclick="deleteTask(${i})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join(''); lucide.createIcons(); }
-        function addTask() { const i = document.getElementById('task-input'); if(i.value){ state.tasks.push({text:i.value, done:false}); i.value=''; saveState(); renderTasks(); } }
-        function toggleTask(i) { state.tasks[i].done = !state.tasks[i].done; saveState(); renderTasks(); }
-        function deleteTask(i) { state.tasks.splice(i,1); saveState(); renderTasks(); }
-
-        let pInt = {deep:null, break:null}, pTim = {deep:7200, break:900};
-        function toggleTimer(t, m) { if(pInt[t]){ clearInterval(pInt[t]); pInt[t]=null; } else { pInt[t]=setInterval(() => { pTim[t]--; const min = Math.floor(pTim[t]/60), sec = pTim[t]%60; document.getElementById(`timer-${t}`).innerText = `${min}:${sec.toString().padStart(2,'0')}`; if(pTim[t]<=0){ clearInterval(pInt[t]); alert('Done!'); }}, 1000);}}
-        function resetTimer(t, m) { clearInterval(pInt[t]); pInt[t]=null; pTim[t]=m*60; document.getElementById(`timer-${t}`).innerText = `${m}:00`; }
-
-        let trChart, prChart;
-        function updateCharts() {
-            const d = new Date(state.currentYear, state.currentMonth + 1, 0).getDate();
-            const pts = Array.from({length:d}, (_,i)=> ((state.completions[`${state.currentYear}-${state.currentMonth}-${i+1}`]?.length || 0)/state.habits.length)*100);
-            const avg = pts.reduce((a,b)=>a+b,0)/d;
-            document.getElementById('progress-percent').innerText = Math.round(avg)+'%';
-            if(trChart) trChart.destroy(); trChart = new Chart(document.getElementById('trendChart'), { type:'line', data:{ labels:Array.from({length:d},(_,i)=>i+1), datasets:[{data:pts, borderColor:'#8b5cf6', fill:true, tension:0.4, backgroundColor:'rgba(139,92,246,0.1)'}]}, options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, max:100, grid:{color:'rgba(255,255,255,0.05)'}}, x:{grid:{display:false}}}}});
-            if(prChart) prChart.destroy(); prChart = new Chart(document.getElementById('monthlyProgressChart'), { type:'doughnut', data:{ datasets:[{data:[avg, 100-avg], backgroundColor:['#3b82f6','#1a1a1f'], borderWidth:0}]}, options:{cutout:'80%', plugins:{tooltip:{enabled:false}}}});
-        }
-
-        function exportData() { const blob = new Blob([JSON.stringify(state)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'backup.json'; a.click(); }
-
-        // Init
-        lucide.createIcons(); renderTracker(); updateCharts();
+      // Start with debug hidden and begin inactivity timer
+      app.classList.add('debug-hidden');
+      resetInactivityTimer();
     </script>
-</body>
+  </body>
 </html>
